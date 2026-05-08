@@ -61,7 +61,7 @@ def busca(query):
         cands.append(textos[i])
         print(f"  cos={s:.4f}  {textos[i][:90]}...")
 
-    pares = [[hyde_doc, c] for c in cands]
+    pares = [[query, c] for c in cands]
     score_ce = ce.predict(pares)
 
     ordem = np.argsort(score_ce)[::-1]
