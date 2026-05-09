@@ -8,7 +8,7 @@ import openai
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
 MODELO_EMB = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-MODELO_RERANK = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+MODELO_RERANK = "BAAI/bge-reranker-v2-m3"
 MODELO_LLM = "gpt-4o-mini"
 
 M = 16
