@@ -3,11 +3,14 @@
 import json
 import os
 import numpy as np
+import torch
+import torch.nn.functional as F
 import faiss
 import openai
-from sentence_transformers import SentenceTransformer, CrossEncoder
+from transformers import AutoTokenizer, AutoModel
+from sentence_transformers import CrossEncoder
 
-MODELO_EMB = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+MODELO_EMB = "neuralmind/bert-base-portuguese-cased"
 MODELO_RERANK = "BAAI/bge-reranker-v2-m3"
 MODELO_LLM = "gpt-4o-mini"
 
@@ -16,17 +19,32 @@ EF_CONSTRUCTION = 200
 EF_SEARCH = 50
 TOP_K = 10
 TOP_FINAL = 3
+MAX_TOK = 256
 
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-modelo = SentenceTransformer(MODELO_EMB)
+tok = AutoTokenizer.from_pretrained(MODELO_EMB, do_lower_case=False)
+bert = AutoModel.from_pretrained(MODELO_EMB)
+bert.eval()
+
 ce = CrossEncoder(MODELO_RERANK)
+
+
+def embed(textos):
+    enc = tok(textos, padding=True, truncation=True, max_length=MAX_TOK, return_tensors="pt")
+    with torch.no_grad():
+        out = bert(**enc).last_hidden_state
+    mask = enc["attention_mask"].unsqueeze(-1).float()
+    pool = (out * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+    pool = F.normalize(pool, p=2, dim=1)
+    return pool.cpu().numpy().astype("float32")
+
 
 with open("manuais.jsonl", encoding="utf-8") as f:
     docs = [json.loads(l) for l in f]
 textos = [d["texto"] for d in docs]
 
-emb = modelo.encode(textos, normalize_embeddings=True, convert_to_numpy=True).astype("float32")
+emb = embed(textos)
 dim = emb.shape[1]
 
 idx = faiss.IndexHNSWFlat(dim, M, faiss.METRIC_INNER_PRODUCT)
@@ -52,7 +70,7 @@ def busca(query):
     hyde_doc = hyde(query)
     print(f"\n[hyde]\n{hyde_doc}\n")
 
-    v = modelo.encode([hyde_doc], normalize_embeddings=True, convert_to_numpy=True).astype("float32")
+    v = embed([hyde_doc])
     scores, ids = idx.search(v, TOP_K)
 
     print(f"[top-{TOP_K} bi-encoder]")
